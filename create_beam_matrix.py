@@ -74,6 +74,52 @@ def find_best_fit_a(nside, tol=1e-6):
     return result.x
 
 
+def keep_top_n_neighb(B, N_neighb):
+    """
+    Keep only the top N_neighb largest elements in each row of the sparse matrix B.
+    Parameters:
+    - B: scipy.sparse matrix, input sparse matrix
+    - N_neighb: int, number of largest elements to keep per row
+    Returns:
+    - result: scipy.sparse matrix, sparse matrix with only top N_neighb elements per row
+    """
+    if not sp.isspmatrix_csr(B):
+        B = B.tocsr()
+    
+    result = B.copy()
+    
+    # For each row, find the threshold value
+    thresholds = np.zeros(B.shape[0])
+    
+    for i in range(B.shape[0]):
+        start, end = B.indptr[i], B.indptr[i+1]
+        row_size = end - start
+        
+        if row_size <= N_neighb:
+            thresholds[i] = -np.inf  # Keep all elements
+        else:
+            row_data = B.data[start:end]
+            partitioned = np.partition(row_data, -N_neighb) # Find the N_neighb-th largest value
+            thresholds[i] = partitioned[-N_neighb]
+    
+    # Apply threshold to all rows
+    for i in range(B.shape[0]):
+        start, end = B.indptr[i], B.indptr[i+1]
+        row_data = result.data[start:end]
+        keep_mask = row_data >= thresholds[i]
+
+        if len(keep_mask[keep_mask]) > N_neighb:
+            # In case of ties, ensure only N_neighb elements are kept
+            sorted_indices = np.argsort(-row_data)
+            keep_mask = np.zeros_like(row_data, dtype=bool)
+            keep_mask[sorted_indices[:N_neighb]] = True
+
+        result.data[start:end] = np.where(keep_mask, row_data, 0)
+    
+    result.eliminate_zeros()
+    return result
+
+
 def main(nside, FWHM):
     # select the larger of the two: beam FWHM or pixel resolution
     res_arcmin = hp.nside2resol(nside, arcmin=True)
@@ -87,9 +133,18 @@ def main(nside, FWHM):
     B_ij_sm = beam_sparse(sparse_theta_ij_query, FWHM=FWHM) 
     a = find_best_fit_a(nside)
     B_ij_pix = beam_sparse(sparse_theta_ij_query, FWHM=res_arcmin/a) # approxiamte the pixel window matrix with a gaussian beam
-    B_ij = B_ij_pix.dot(B_ij_sm)  
+    B_ij = B_ij_pix.dot(B_ij_sm)
 
-    filename = "beam_sparse_{0}_FWHM{1}.npz".format(nside, FWHM)
+    # eliminate very small values to save space
+    B_ij.data[B_ij.data < 1e-15] = 0 # np.float64 precision
+    B_ij.eliminate_zeros()
+
+    # equalize the number of non-zero elements in each row
+    N_cutoff = np.diff(B_ij.indptr)
+    N_neighb = np.min(N_cutoff)
+    B_ij = keep_top_n_neighb(B_ij, N_neighb)
+
+    filename = "beam_sparse_{0}_FWHM{1}_cutoff.npz".format(nside, FWHM)
     sp.save_npz(filename, B_ij)
     print(f"Saved beam matrix to {filename}")
 
