@@ -1,7 +1,6 @@
 import numpy as np
 import healpy as hp
 import scipy.sparse as sp
-from scipy.optimize import minimize_scalar
 import argparse
 
 
@@ -43,35 +42,6 @@ def beam_sparse(theta_sparse, FWHM):
     B_ij = norm_matrix @ B_ij  # normalize each row
 
     return B_ij
-
-
-def find_best_fit_a(nside, tol=1e-6):
-    """
-    Find the best fit parameter 'a' for the Gaussian beam that minimizes the difference
-    between bl² and the pixel window function.
-    
-    Parameters:
-    - nside: int, HEALPix resolution parameter
-    - tol: float, tolerance for optimization (default=1e-6)
-    
-    Returns:
-    - best_a: float, optimal value of parameter 'a'
-    """
-    lmax = 2*nside # from testing this is the best option
-
-    # Harmonic pixel window function
-    pixwin = hp.sphtfunc.pixwin(nside, pol=False, lmax=lmax)
-
-    # Define the objective function to minimize
-    def objective(a):
-        bl = hp.gauss_beam(hp.nside2resol(nside)/a, lmax=lmax)
-        diff = np.sum((bl - pixwin)**2)
-        return diff
-    
-    # Find the optimal 'a' using bounded optimization
-    result = minimize_scalar(objective, bounds=(0.1, 10), method='bounded', options={'xatol': tol})
-    
-    return result.x
 
 
 def keep_top_n_neighb(B, N_neighb):
@@ -130,11 +100,7 @@ def main(nside, FWHM):
     print("Created sparse theta_ij matrix.")
 
     # create B' = PB from the beam and pixel window matrices
-    B_ij_sm = beam_sparse(sparse_theta_ij_query, FWHM=FWHM) 
-    a = find_best_fit_a(nside)
-    B_ij_pix = beam_sparse(sparse_theta_ij_query, FWHM=res_arcmin/a) # approxiamte the pixel window matrix with a gaussian beam
-    B_ij = B_ij_pix#.dot(B_ij_sm)
-    #B_ij = B_ij_sm
+    B_ij = beam_sparse(sparse_theta_ij_query, FWHM=FWHM)
     
     # eliminate very small values to save space
     B_ij.data[B_ij.data < 1e-15] = 0 # np.float64 precision
@@ -147,7 +113,7 @@ def main(nside, FWHM):
     print(f"Created beam matrix with {N_neighb} non-zero elements per row.")
     
 
-    filename = "beam_sparse_{0}_FWHM{1}_cutoff_JUST_PIXELIZATION.npz".format(nside, FWHM)
+    filename = "beam_sparse_{0}_FWHM{1}.npz".format(nside, FWHM)
     sp.save_npz(filename, B_ij)
     print(f"Saved beam matrix to {filename}")
 
