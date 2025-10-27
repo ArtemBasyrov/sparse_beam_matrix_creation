@@ -133,8 +133,9 @@ def main(nside, FWHM):
     B_ij_sm = beam_sparse(sparse_theta_ij_query, FWHM=FWHM) 
     a = find_best_fit_a(nside)
     B_ij_pix = beam_sparse(sparse_theta_ij_query, FWHM=res_arcmin/a) # approxiamte the pixel window matrix with a gaussian beam
-    B_ij = B_ij_pix.dot(B_ij_sm)
-
+    B_ij = B_ij_pix#.dot(B_ij_sm)
+    #B_ij = B_ij_sm
+    
     # eliminate very small values to save space
     B_ij.data[B_ij.data < 1e-15] = 0 # np.float64 precision
     B_ij.eliminate_zeros()
@@ -143,8 +144,10 @@ def main(nside, FWHM):
     N_cutoff = np.diff(B_ij.indptr)
     N_neighb = np.min(N_cutoff)
     B_ij = keep_top_n_neighb(B_ij, N_neighb)
+    print(f"Created beam matrix with {N_neighb} non-zero elements per row.")
+    
 
-    filename = "beam_sparse_{0}_FWHM{1}_cutoff.npz".format(nside, FWHM)
+    filename = "beam_sparse_{0}_FWHM{1}_cutoff_JUST_PIXELIZATION.npz".format(nside, FWHM)
     sp.save_npz(filename, B_ij)
     print(f"Saved beam matrix to {filename}")
 
