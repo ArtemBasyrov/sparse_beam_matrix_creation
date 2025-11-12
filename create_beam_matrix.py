@@ -104,6 +104,12 @@ def main(nside, FWHM, observed_pixels_file=None):
     # Load observed pixels if provided
     if observed_pixels_file:
         observed_pixels = np.load(observed_pixels_file)
+
+        # check that all elements are unique in observed_pixels
+        unique_pixels = np.unique(observed_pixels)
+        if len(unique_pixels) != len(observed_pixels):
+            raise ValueError("Observed pixels array contains duplicate entries.")
+        
         print(f"Loaded {len(observed_pixels)} observed pixels from {observed_pixels_file}")
     else:
         observed_pixels = None

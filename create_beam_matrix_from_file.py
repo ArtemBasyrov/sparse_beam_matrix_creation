@@ -15,7 +15,6 @@ from datetime import timedelta
 def read_beam_file(path_to_file, field=0):
     beam_map = enmap.read_map(path_to_file)
     pixel_map = np.array(beam_map[field]).copy()
-    pixel_map = 10*np.log10(np.abs(pixel_map)) # K_RJ -> dB
 
     ra, dec = beam_map.posmap()
     ra_c = ra[100,100]
@@ -72,7 +71,7 @@ def beam_stacking_optimized(pixel_map_sel, pix_patch, ipix_neighbours):
     
     # Normalize
     total = np.sum(beam_stacked)
-    if total > 0:
+    if np.abs(total) > 0:
         beam_stacked /= total
     
     return beam_stacked
@@ -156,7 +155,7 @@ def beam_from_file(nside, path_to_file, field=0, observed_pixels=None):
     # a function of angular scale and basically anything that happens under -25 dB 
     # doesn't make any differnce to sigma(r) or other parameters uncertainty"
     # Nadia Dachlythra
-    sel = (pixel_map > -25)
+    sel = (10*np.log10(np.abs(pixel_map)) > -25) # K_RJ -> dB
     pixel_map_sel = pixel_map[sel]
     
     # Check if precomputed rotation vectors exist
@@ -350,6 +349,12 @@ def main(nside, path_to_file, fields, observed_pixels_file=None):
     # Load observed pixels if provided
     if observed_pixels_file:
         observed_pixels = np.load(observed_pixels_file)
+
+        # check that all elements are unique in observed_pixels
+        unique_pixels = np.unique(observed_pixels)
+        if len(unique_pixels) != len(observed_pixels):
+            raise ValueError("Observed pixels array contains duplicate entries.")
+        
         print(f"Loaded {len(observed_pixels)} observed pixels from {observed_pixels_file}")
     else:
         observed_pixels = None
